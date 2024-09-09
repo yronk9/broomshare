@@ -98,7 +98,7 @@
         #locate-button {
             position: absolute;
             bottom: 20px;
-            right: 20px;
+            left: 20px;
             background-color: white;
             border: none;
             border-radius: 50%;
@@ -150,7 +150,8 @@
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBFfhSviT0m2MGNzE3QJYPRoE4F5e2-55w&libraries=places"></script>
     <script>
         let map;
-        let marker;
+        let userMarker;
+        let searchMarker;
         let watchId;
         let currentPosition;
 
@@ -164,7 +165,7 @@
             });
 
             if (position) {
-                updateMarkerPosition(position.coords);
+                updateUserPosition(position);
             }
 
             const input = document.getElementById('search-input');
@@ -181,12 +182,21 @@
                     return;
                 }
 
+                if (searchMarker) {
+                    searchMarker.setMap(null);
+                }
+
                 const bounds = new google.maps.LatLngBounds();
                 places.forEach(function(place) {
                     if (!place.geometry || !place.geometry.location) {
                         console.log("Returned place contains no geometry");
                         return;
                     }
+
+                    searchMarker = new google.maps.Marker({
+                        map: map,
+                        position: place.geometry.location
+                    });
 
                     if (place.geometry.viewport) {
                         bounds.union(place.geometry.viewport);
@@ -197,43 +207,41 @@
                 map.fitBounds(bounds);
             });
 
-            startTracking();
+            document.getElementById('locate-button').addEventListener('click', focusOnCurrentLocation);
         }
 
-        function updateMarkerPosition(coords) {
-            currentPosition = coords;
-            const latLng = new google.maps.LatLng(coords.latitude, coords.longitude);
-            
-            if (!marker) {
-                marker = new google.maps.Marker({
+        function updateUserPosition(position) {
+            currentPosition = position;
+            const latLng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+
+            if (!userMarker) {
+                userMarker = new google.maps.Marker({
                     position: latLng,
                     map: map,
-                    title: 'Your Location'
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        scale: 10,
+                        fillColor: "#4285F4",
+                        fillOpacity: 1,
+                        strokeColor: "#ffffff",
+                        strokeWeight: 2,
+                    },
                 });
             } else {
-                marker.setPosition(latLng);
+                userMarker.setPosition(latLng);
             }
         }
 
         function startTracking() {
             if (navigator.geolocation) {
-                watchId = navigator.geolocation.watchPosition(
-                    updateMarkerPosition,
-                    showError,
-                    {
-                        enableHighAccuracy: true,
-                        timeout: 5000,
-                        maximumAge: 0
-                    }
-                );
+                watchId = navigator.geolocation.watchPosition(updateUserPosition, showError, {
+                    enableHighAccuracy: true,
+                    timeout: 5000,
+                    maximumAge: 0
+                });
             } else {
                 alert("Geolocation is not supported by this browser.");
-            }
-        }
-
-        function stopTracking() {
-            if (watchId !== undefined) {
-                navigator.geolocation.clearWatch(watchId);
+                initMap();
             }
         }
 
@@ -252,56 +260,52 @@
                     alert("An unknown error occurred.");
                     break;
             }
+            initMap();
         }
 
-        function snapToCurrentLocation() {
+        function focusOnCurrentLocation() {
             if (currentPosition) {
-                map.panTo({lat: currentPosition.latitude, lng: currentPosition.longitude});
+                const latLng = new google.maps.LatLng(currentPosition.coords.latitude, currentPosition.coords.longitude);
+                map.panTo(latLng);
                 map.setZoom(15);
             } else {
                 alert("Current location is not available.");
             }
         }
 
+        function toggleMenu() {
+            document.getElementById('side-menu').classList.toggle('open');
+            document.getElementById('overlay').style.display = 
+                document.getElementById('overlay').style.display === 'block' ? 'none' : 'block';
+        }
+
         window.onload = function() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(initMap, showError);
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    initMap(position);
+                    startTracking();
+                }, showError);
             } else {
                 alert("Geolocation is not supported by this browser.");
                 initMap();
             }
 
-            document.getElementById('locate-button').addEventListener('click', snapToCurrentLocation);
+            // Set up event listeners for the menu
+            document.getElementById('hamburger').addEventListener('click', toggleMenu);
+            document.getElementById('overlay').addEventListener('click', toggleMenu);
+            document.getElementById('menu-map').addEventListener('click', function() {
+                alert('Map option clicked');
+                toggleMenu();
+            });
+            document.getElementById('menu-favourites').addEventListener('click', function() {
+                alert('Favourites option clicked');
+                toggleMenu();
+            });
+            document.getElementById('menu-settings').addEventListener('click', function() {
+                alert('Settings option clicked');
+                toggleMenu();
+            });
         };
-
-        // Side menu functionality
-        const hamburger = document.getElementById('hamburger');
-        const sideMenu = document.getElementById('side-menu');
-        const overlay = document.getElementById('overlay');
-
-        function toggleMenu() {
-            sideMenu.classList.toggle('open');
-            overlay.style.display = overlay.style.display === 'block' ? 'none' : 'block';
-        }
-
-        hamburger.addEventListener('click', toggleMenu);
-        overlay.addEventListener('click', toggleMenu);
-
-        // Menu item click handlers
-        document.getElementById('menu-map').addEventListener('click', function() {
-            alert('Map option clicked');
-            toggleMenu();
-        });
-
-        document.getElementById('menu-favourites').addEventListener('click', function() {
-            alert('Favourites option clicked');
-            toggleMenu();
-        });
-
-        document.getElementById('menu-settings').addEventListener('click', function() {
-            alert('Settings option clicked');
-            toggleMenu();
-        });
     </script>
 </body>
 </html>
