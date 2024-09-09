@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BroomShare</title>
+    <title>broomshare - bathroom finder</title>
     <style>
         body, html {
             margin: 0;
@@ -114,12 +114,18 @@
         #locate-button:hover {
             background-color: #f0f0f0;
         }
+        .restroom-icon {
+            width: 32px;
+            height: 32px;
+            background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%234CAF50"><path d="M12 2c-4.42 0-8 3.58-8 8 0 4.41 3.58 8 8 8s8-3.59 8-8c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm3-7h-2V7h-2v2H9v2h2v2h2v-2h2v-2z"/></svg>');
+            background-size: cover;
+        }
     </style>
 </head>
 <body>
     <div id="app">
         <div id="header">
-            <span>BroomShare</span>
+            <span>broomshare</span>
             <svg id="hamburger" viewBox="0 0 100 80" width="30" height="30">
                 <rect width="100" height="15" fill="white"></rect>
                 <rect y="30" width="100" height="15" fill="white"></rect>
@@ -128,7 +134,7 @@
         </div>
         <div id="content">
             <div id="search-container">
-                <input type="text" id="search-input" placeholder="Search for a location">
+                <input type="text" id="search-input" placeholder="Search a location">
             </div>
             <div id="map"></div>
             <button id="locate-button" title="Snap to current location">
@@ -151,9 +157,9 @@
     <script>
         let map;
         let userMarker;
-        let searchMarker;
         let watchId;
         let currentPosition;
+        let restroomMarkers = [];
 
         function initMap(position) {
             const latitude = position ? position.coords.latitude : 0;
@@ -166,6 +172,7 @@
 
             if (position) {
                 updateUserPosition(position);
+                searchNearbyRestrooms(position);
             }
 
             const input = document.getElementById('search-input');
@@ -182,21 +189,12 @@
                     return;
                 }
 
-                if (searchMarker) {
-                    searchMarker.setMap(null);
-                }
-
                 const bounds = new google.maps.LatLngBounds();
                 places.forEach(function(place) {
                     if (!place.geometry || !place.geometry.location) {
                         console.log("Returned place contains no geometry");
                         return;
                     }
-
-                    searchMarker = new google.maps.Marker({
-                        map: map,
-                        position: place.geometry.location
-                    });
 
                     if (place.geometry.viewport) {
                         bounds.union(place.geometry.viewport);
@@ -205,6 +203,14 @@
                     }
                 });
                 map.fitBounds(bounds);
+
+                // Search for restrooms near the selected place
+                searchNearbyRestrooms({
+                    coords: {
+                        latitude: bounds.getCenter().lat(),
+                        longitude: bounds.getCenter().lng()
+                    }
+                });
             });
 
             document.getElementById('locate-button').addEventListener('click', focusOnCurrentLocation);
@@ -230,6 +236,53 @@
             } else {
                 userMarker.setPosition(latLng);
             }
+        }
+
+        function searchNearbyRestrooms(position) {
+            const service = new google.maps.places.PlacesService(map);
+            const location = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+
+            service.nearbySearch({
+                location: location,
+                radius: 5000,
+                keyword: 'public restroom'
+            }, handleRestroomResults);
+        }
+
+        function handleRestroomResults(results, status) {
+            if (status === google.maps.places.PlacesServiceStatus.OK) {
+                clearRestroomMarkers();
+                for (let i = 0; i < results.length; i++) {
+                    createRestroomMarker(results[i]);
+                }
+            }
+        }
+
+        function createRestroomMarker(place) {
+            const marker = new google.maps.Marker({
+                map: map,
+                position: place.geometry.location,
+                icon: {
+                    url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%234CAF50"><path d="M12 2c-4.42 0-8 3.58-8 8 0 4.41 3.58 8 8 8s8-3.59 8-8c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6s2.69-6 6-6 6 2.69 6 6-2.69 6-6 6zm3-7h-2V7h-2v2H9v2h2v2h2v-2h2v-2z"/></svg>',
+                    scaledSize: new google.maps.Size(32, 32)
+                }
+            });
+
+            restroomMarkers.push(marker);
+
+            google.maps.event.addListener(marker, 'click', function() {
+                const infoWindow = new google.maps.InfoWindow({
+                    content: `<strong>${place.name}</strong><br>${place.vicinity}`
+                });
+                infoWindow.open(map, marker);
+            });
+        }
+
+        function clearRestroomMarkers() {
+            for (let i = 0; i < restroomMarkers.length; i++) {
+                restroomMarkers[i].setMap(null);
+            }
+            restroomMarkers = [];
         }
 
         function startTracking() {
@@ -268,6 +321,7 @@
                 const latLng = new google.maps.LatLng(currentPosition.coords.latitude, currentPosition.coords.longitude);
                 map.panTo(latLng);
                 map.setZoom(15);
+                searchNearbyRestrooms(currentPosition);
             } else {
                 alert("Current location is not available.");
             }
